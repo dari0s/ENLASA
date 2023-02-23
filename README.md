@@ -16,3 +16,12 @@
 Observaciones : El proyecto presenta dos salidas independientes dependiendo de la opción elegida en el menú inicial (Dam_Embalses_O1 y Dam_Embalses_O1), donde la primera opción corresponde al trabajo con información desde PLP y la segunda con data proveniente desde el Coordinador. Adicionalmente se pueden generar los archivos EmbalsesDataO1 y EmbalsesDataO2 los cuales corresponden a una salida auxiliar con datos de los embalses sin realizar cruce de información.
 
 ![Untitled](https://user-images.githubusercontent.com/20529092/214553942-d8a0e664-5776-47f9-8624-92b22ed5aa84.png)
+
+
+## 2. Combustibles
+
+### Descripción 
+
+- El proyecto (Folder/Combustibles_Git) contiene los siguientes archivos y el detalle se presenta a continuación. Se adjunta también un diagrama explicativo en términos de __inputs__ y __outputs__.
+
+Inputs : = {PO230123.xlsx , Mapa_Final.xlsx, INPUT.Fuel_v.csv, novinc_cen.xlsx}
