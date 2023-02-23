@@ -1,0 +1,640 @@
+import pandas as pd 
+import numpy as np 
+import os, sys, time 
+import matplotlib as plt 
+import openpyxl   
+import string 
+import os                           # path
+from statistics import mean 
+
+
+# Path Principal
+
+ruta = os.path.abspath(os.getcwd())
+
+# Lectura de Archivos
+
+archivo_PO = 'PO230123'
+PO = pd.read_excel(archivo_PO + '.xlsx', sheet_name = 'RESUMEN', header = None, engine = 'openpyxl') 
+Mapa = pd.read_excel('Mapa_Final' + '.xlsx',engine = 'openpyxl')
+data_f = pd.read_csv('INPUT.Fuel_v.csv')
+no_vinc_cen = pd.read_excel('novinc_cen' + '.xlsx',engine = 'openpyxl')
+
+def encontrar(bd,header : str):
+    filas = bd.shape[0]
+    columnas = bd.shape[1]
+    pivot_fila = 0
+    pivot_columna = 0
+    for i in range(filas):
+        for j in range(columnas):
+            if (bd.iloc[i][j] == header):
+                pivot_fila = i
+                pivot_columna = j
+                break
+    return (pivot_fila,pivot_columna)
+
+loc = encontrar(PO,'Combustible')
+
+
+PO.iloc[encontrar(PO,'Combustible')[0]][encontrar(PO,'Combustible')[1]-7]
+
+PO = pd.read_excel(archivo_PO + '.xlsx', sheet_name = 'RESUMEN', header = encontrar(PO,'Combustible'), engine = 'openpyxl')
+
+# Alternativa PO_2['Costo'] = Costo de Combustible
+
+PO_2 = pd.read_excel(archivo_PO + '.xlsx', sheet_name = 'RESUMEN', header = loc[0]+1, engine = 'openpyxl')
+
+# PO_2['Unnamed: 1'] = Nombre Centrales / Ubicar Total para saber hasta donde cortar. 
+
+Costo_Centrales = PO_2[['Costo']] [1:519]
+#Costo_Lista = Costo_Centrales.tolist()
+Costos = Costo_Centrales['Costo'].values.tolist()
+
+# Ubicar Total
+
+#print(encontrar(PO_2,'Total'))
+
+Nombre_Centrales = PO_2[['Unnamed: 1']] [1:519] # Extremo final considera N-1, i.e [a,N]
+Nombre_Centrales = Nombre_Centrales.rename(columns={'Unnamed: 1': 'Nombre'})
+Nombres = Nombre_Centrales['Nombre'].values.tolist()
+
+#print(Nombres)
+
+# Crear (Unir) DataFrame 
+
+#Centrales_Base = pd.merge(Nombre_Centrales, Costo_Centrales, left_on='Costo', right_on='Costo')
+
+Centrales_Data_Base = pd.DataFrame({'Nombre' : Nombres, 'Costo' : Costos},index = None)
+
+# Agregar Columna de fuel_type a Centrales_Data_Base
+
+Centrales_Data_Base.insert(2,'fuel_type','fuel')
+
+# Agrega Columa con nombre formato fuel_
+
+Centrales_Data_Base.insert(3,'Nombrefuel','fuel_' + Centrales_Data_Base['Nombre'])
+
+
+#print(Centrales_Data_Base)
+
+# Diccionario - Nombres AMEBA [AUXILIAR]
+##  Antes de armar diccionario se necesita ordenar (Centrales_Data_Base y Mapa)
+
+# Encontrar Orden 
+
+#Se resetean los Indices
+Centrales_Data_Base.reset_index(inplace = True, drop = True)
+Mapa.reset_index(inplace = True, drop = True)
+
+#Tipo Dato
+
+Centrales_Data_Base['Nombrefuel'] = Centrales_Data_Base['Nombrefuel'].astype(str)
+Mapa['NombreMapa'] = Mapa['NombreMapa'].astype(str)
+
+lista_indices = []
+
+for i in range(0,len(Mapa)):
+    nombre_cen = Mapa.at[i,'NombreMapa']
+    index_cen = Centrales_Data_Base.index[Centrales_Data_Base['Nombrefuel'] == nombre_cen].tolist()[0]
+    lista_indices.append(index_cen) 
+
+#print(lista_indices)
+
+# df Ordenado (según formato Mapa_Final)
+
+Centrales_Data_Base_Ord = pd.DataFrame(Centrales_Data_Base, index = lista_indices)
+
+# Se agrega Col Nombre - AMEBA -> Se debe encontrar orden de correspondencia
+
+#Se resetean los Indices
+Centrales_Data_Base_Ord.reset_index(inplace = True, drop = True)
+Mapa.reset_index(inplace = True, drop = True)
+
+Centrales_Data_Base_Ord.insert(4,'NombreAmeba',Mapa['NombreAmeba'])
+
+print(Centrales_Data_Base_Ord)
+print(len(Centrales_Data_Base_Ord))
+
+# Guardar Archivo
+Centrales_Data_Base_Ord.to_csv('CentralesOrd.csv', index = None)
+
+
+print(len(data_f['name']))
+print(len(Centrales_Data_Base_Ord['NombreAmeba']))
+print(len(data_f['name']) - len(Centrales_Data_Base_Ord['NombreAmeba']))
+
+# Centrales SIN MATCH
+
+no_fuel = set(data_f['name']) - set(Centrales_Data_Base_Ord['NombreAmeba'])
+
+print(no_fuel)
+
+print(data_f)
+
+print(Centrales_Data_Base_Ord)
+
+# Diccionario NombreAmeba , Costo
+
+dic_ = dict(zip(Centrales_Data_Base_Ord['NombreAmeba'],Centrales_Data_Base_Ord['Costo']))
+
+# Reemplazo en INPUT.Fuel
+
+#data_f['fuel_price'] = data_f['fuel_price'].map(dic_, na_action= None)
+
+
+
+print(data_f)
+print(Centrales_Data_Base_Ord)
+
+'''
+# Guarda en Costo de Centrales_Ord fuel_price de INPUT.Fuel
+lista_dam_vmin = []
+
+for i in range(0, len(Centrales_Data_Base_Ord)):
+    elemento_central = Centrales_Data_Base_Ord.at[i, 'NombreAmeba']
+    #buscamos
+    index_central = data_f.index[data_f['name'] == elemento_central].tolist()
+    #print('lista:', index_central)
+    if (len(index_central) > 0):
+        index_central = data_f.index[data_f['name'] == elemento_central].tolist()[0]
+        #print('int: ', index_central)
+        Centrales_Data_Base_Ord.at[i, 'Costo'] = data_f.at[index_central, 'fuel_price']
+    else:
+        # Central que no está en INPUT.Fuel pero si en Centrales_Ord
+        print('Central no está: ', elemento_central)
+        lista_dam_vmin.append(elemento_central)
+'''
+print(len(Centrales_Data_Base_Ord['NombreAmeba']))
+print(len(data_f['name']))
+
+# Quitar elementos de Centrales_Ord que no están en INPUT.Fuel -> 534 - 518 
+# Serie.drop([]) -> No actualiza indices
+
+no_fuel = list(set(data_f['name']) - set(Centrales_Data_Base_Ord['NombreAmeba']))
+
+no_fuel_df = pd.DataFrame(no_fuel, columns = ['Nombre'])
+
+# Encontrar índices de no_fuel en INPUT.Fuel
+
+data_f.reset_index(inplace = True, drop = True)
+
+lista_centrales_NOFuel = []
+lista_centrales_NOFuel_i = []
+
+for i in range(0, len(no_fuel_df)):
+    elemento_central = no_fuel_df.at[i, 'Nombre']
+    #buscamos
+    index_central = data_f.index[data_f['name'] == elemento_central].tolist()
+    #print('lista:', index_central)
+    if (len(index_central) > 0):
+        index_central = data_f.index[data_f['name'] == elemento_central].tolist()[0]
+        print('int: ', index_central)
+        no_fuel_df.at[i, 'Nombre'] = data_f.at[index_central, 'name']
+        lista_centrales_NOFuel.append(elemento_central)
+        lista_centrales_NOFuel_i.append(index_central)
+    else:
+        print('Central no está: ', elemento_central)
+        
+print(lista_centrales_NOFuel)
+print(lista_centrales_NOFuel_i)
+
+print(len(data_f))
+
+data_f_drop = data_f.drop(lista_centrales_NOFuel_i).reset_index()
+print('pase')
+print(len(data_f_drop))
+
+## Eliminar Centrales con Nombre '-' de Centrales_Ord
+
+print(encontrar(Centrales_Data_Base_Ord,'-'))
+Centrales_Data_Base_Ord_drop = Centrales_Data_Base_Ord.drop([encontrar(Centrales_Data_Base_Ord,'-')[0]]).reset_index()
+
+
+print(len(Centrales_Data_Base_Ord_drop))
+print(len(data_f_drop))
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################################## -----------------
+
+
+
+data_f_drop.reset_index(inplace = True, drop = True)
+Centrales_Data_Base_Ord_drop.reset_index(inplace = True, drop = True)
+
+
+
+lista_dam_vmin = []
+
+for i in range(0, len(Centrales_Data_Base_Ord_drop)):
+    elemento_central = Centrales_Data_Base_Ord_drop.at[i, 'NombreAmeba']
+    #buscamos
+    index_central = data_f_drop.index[data_f_drop['name'] == elemento_central].tolist()
+    #print('lista:', index_central)
+    if (len(index_central) > 0):
+        index_central = data_f_drop.index[data_f_drop['name'] == elemento_central].tolist()[0]
+        #print('int: ', index_central)
+        data_f_drop.at[i, 'fuel_price'] = Centrales_Data_Base_Ord_drop.at[index_central, 'Costo']
+    else:
+        # Central que no está en INPUT.Fuel pero si en Centrales_Ord
+        print('Central no está: ', elemento_central)
+        lista_dam_vmin.append(elemento_central)
+
+print(data_f_drop)
+
+data_f_drop.reset_index(inplace = True, drop = True)
+Centrales_Data_Base_Ord_drop.reset_index(inplace = True, drop = True)
+
+print(data_f_drop)
+
+# Guardar Archivo
+
+data_f_drop.to_csv('4.csv', index = None)
+Centrales_Data_Base_Ord_drop.to_csv('5.csv', index = None)
+
+
+
+
+
+
+
+
+
+
+
+
+
+'''
+
+
+
+'''
+
+
+
+
+
+'''
+
+
+
+print(data_f)
+print(Centrales_Data_Base_Ord)
+
+# Guardar Archivo
+data_f.to_csv('3.csv', index = None)
+
+
+
+
+
+
+
+
+
+###################### ////////////////////////////////////////////
+
+## Indices Coincidencias Centrales_Ord e INPUT.Fuel // Indices INPUT.Fuel
+
+lista_c = []
+
+for i in range(0,len(Centrales_Data_Base_Ord)):
+    nombre_cen_c = Centrales_Data_Base_Ord.at[i,'NombreAmeba']
+    index_cen_c = data_f.index[data_f['name'] == nombre_cen_c].tolist()[0]
+    lista_c.append(index_cen_c) 
+
+## INPUT.Fuel con coincidencias df
+
+data_ff = pd.DataFrame(data_f, index = lista_c)
+
+## Se busca correspondencia de Centrales_Ord con nuevo INPUT.Fuel (data_ff)
+
+lista_cc = []
+
+for i in range(0,len(data_f)):
+    nombre_cen_cc = data_f.at[i,'name']
+    # Indices de Centrales_Ord en donde exista coincidencia con name
+    index_cen_cc = Centrales_Data_Base_Ord.index[Centrales_Data_Base_Ord['NombreAmeba'] == nombre_cen_cc].tolist()[0]
+    lista_cc.append(index_cen_cc)
+     
+print(lista_cc)
+
+Centrales_Data_Base_Ord = pd.DataFrame(Centrales_Data_Base_Ord, index = lista_cc)
+
+# Guardar Archivo
+Centrales_Data_Base_Ord.to_csv('1.csv', index = None)
+
+# Guardar Archivo
+data_ff.to_csv('2.csv', index = None)
+
+
+
+
+
+
+
+
+
+
+
+
+
+## Se busca orden (indices) de INPUT.Fuel_v 
+
+#Se resetean los Indices
+Centrales_Data_Base_Ord.reset_index(inplace = True, drop = True)
+data_f.reset_index(inplace = True, drop = True)
+
+
+lista_indices_fu = []
+
+for i in range(0,len(Centrales_Data_Base_Ord)):
+    nombre_cen_fu = Centrales_Data_Base_Ord.at[i,'NombreAmeba']
+    index_cen_fu = data_f.index[data_f['name'] == nombre_cen_fu].tolist()[0]
+    lista_indices_fu.append(index_cen_fu) 
+
+# df Ordenado (según formato Mapa_Final)
+
+Centrales_Data_Base_Ord = pd.DataFrame(Centrales_Data_Base, index = lista_indices_fu)
+
+
+print(Centrales_Data_Base_Ord)
+
+# Guardar Archivo
+Centrales_Data_Base_Ord.to_csv('CentralesOrd1.csv', index = None)
+
+
+
+
+
+
+
+
+'''
+
+
+'''
+# Ajuste de tipo de datos
+
+Centrales_Data_Base_Ord['NombreAmeba'] = Centrales_Data_Base_Ord['NombreAmeba'].astype(str)
+Mapa['NombreMapa'] = Mapa['NombreMapa'].astype(str)
+
+'''
+
+'''
+# Diccionario para reemplazo 
+
+dic_nom = dict(zip(Centrales_Data_Base_Ord['NombreAmeba'],Mapa['NombreAmeba']))
+
+print(Centrales_Data_Base_Ord['NombreAmeba'])
+print(Mapa['NombreAmeba'])
+
+print(dic_nom)
+
+# Actualización Nombre Ameba
+
+Centrales_Data_Base_Ord['NombreAmeba'] = Centrales_Data_Base_Ord['NombreAmeba'].map(dic_nom,na_action= None)
+
+print(Centrales_Data_Base_Ord)
+
+
+
+
+###################################################
+
+
+
+# Encontrar Indices en INPUT.Fuel
+
+#Se resetean los Indices
+Centrales_Data_Base_Ord.reset_index(inplace = True, drop = True)
+
+######### ---> Agregar Como Costo a las no_vinc el promedio 
+
+# Lista Centrales NO Vinculantes -> Costo := Promedio de por Tecnologia 
+
+###############################################
+#### // [biomass,coal,cogeneration,diesel, ####
+#### fueloil,gas,geothermal,gnl,nuclear]   ####
+###############################################
+
+# Datos de Costos
+
+costos_geotermica = data_f['fuel_type'] == 'geothermal'
+costos_diesel = data_f['fuel_type'] == 'diesel'
+costos_biomasa = data_f['fuel_type'] == 'biomass'
+costos_gnl = data_f['fuel_type'] == 'gnl'
+costos_fueloil = data_f['fuel_type'] == 'fueloil'
+costos_gas = data_f['fuel_type'] == 'gas'
+costos_coal = data_f['fuel_type'] == 'coal'
+costos_nuclear = data_f['fuel_type'] == 'nuclear'
+costos_cogeneration = data_f['fuel_type'] == 'cogeneration'
+
+# Pasar a Listas
+
+costos_geotermica_val = data_f[costos_geotermica]['fuel_price'].values.tolist()
+costos_diesel_val = data_f[costos_diesel]['fuel_price'].values.tolist()
+costos_biomasa_val = data_f[costos_biomasa]['fuel_price'].values.tolist()
+costos_gnl_val = data_f[costos_gnl]['fuel_price'].values.tolist()
+costos_fueloil_val = data_f[costos_fueloil]['fuel_price'].values.tolist()
+costos_gas_val = data_f[costos_gas]['fuel_price'].values.tolist()
+costos_coal_val = data_f[costos_coal]['fuel_price'].values.tolist()
+costos_nuclear_val = data_f[costos_nuclear]['fuel_price'].values.tolist()
+costos_cogeneration_val = data_f[costos_cogeneration]['fuel_price'].values.tolist()
+
+# Calculo de Promedio
+
+prom_costos_geotermica = mean(costos_geotermica_val)
+prom_costos_diesel = mean(costos_diesel_val)
+prom_costos_biomasa = mean(costos_biomasa_val)
+prom_costos_gnl = mean(costos_gnl_val)
+prom_costos_fueloil = mean(costos_fueloil_val)
+prom_costos_gas= mean(costos_gas_val)
+prom_costos_coal= mean(costos_coal_val)
+prom_costos_nuclear= mean(costos_nuclear_val)
+prom_costos_cogeneration= mean(costos_cogeneration_val)
+
+# Lista que junta Costos Promedio
+
+costos_prom = []
+costos_prom.append(prom_costos_geotermica)
+costos_prom.append(prom_costos_diesel)
+costos_prom.append(prom_costos_biomasa)
+costos_prom.append(prom_costos_gnl)
+costos_prom.append(prom_costos_fueloil)
+costos_prom.append(prom_costos_gas)
+costos_prom.append(prom_costos_coal)
+costos_prom.append(prom_costos_nuclear)
+costos_prom.append(prom_costos_cogeneration)
+
+print(no_vinc_cen)
+
+# DataFrame Tipo Combustible / Precio Promedio
+costos_prom_df = pd.DataFrame({'tipo_combustible' : ['geothermal', 'diesel', 'biomass', 'gnl','fueloil',
+                'gas','coal','nuclear','cogeneration'], 
+'fuel_price_mean' : costos_prom})
+
+for i in range(0, len(no_vinc_cen)):
+    #Recorrer columna de tipo de combustible
+    elem = no_vinc_cen.at[i, 'fuel_type']
+    if elem == 'geothermal':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_geotermica #0
+    elif elem == 'diesel':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_diesel #1212.729406
+    elif elem == 'biomass':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_biomasa #21.126393
+    elif elem == 'gnl':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_gnl #466.385320
+    elif elem == 'fueloil':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_fueloil
+    elif elem == 'gas':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_gas
+    elif elem == 'coal':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_coal            
+    elif elem == 'nuclear':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_nuclear
+    elif elem == 'cogeneration':
+        no_vinc_cen.at[i,'Costo'] = prom_costos_cogeneration      
+    else:
+        print('No se encontró el Tipo de Combustible')
+
+print(no_vinc_cen)
+
+
+# Agregar Centrales Restantes Antes de Encontrar Indices (no_vinc)
+
+Centrales_Data_Base_Ord = pd.concat([Centrales_Data_Base_Ord, no_vinc_cen])
+
+print(Centrales_Data_Base_Ord)
+
+
+###########################################################################
+
+
+## Encontrar Indices 
+
+
+
+Centrales_Data_Base_Ord.to_csv('AuxiliarOrd.csv', index= None)
+
+print(len(Centrales_Data_Base_Ord))
+print(len(data_f))
+
+
+output = Centrales_Data_Base_Ord['NombreAmeba'].values.tolist()
+Fuel = data_f['name'].values.tolist()
+
+print(output)
+print(Fuel)
+# Centrales que están en Fuel pero no en Mapa
+
+diff = list(set(output) - set(Fuel))
+
+print(diff)
+
+
+
+
+
+lista_indices_2 = []
+
+for i in range(0,len(Centrales_Data_Base_Ord)):
+    nombre_cen_2 = Centrales_Data_Base_Ord.at[i,'NombreAmeba']
+    index_cen_2 = data_f.index[data_f['name'] == nombre_cen_2].tolist()[0]
+    lista_indices_2.append(index_cen_2) 
+
+print(lista_indices_2)
+
+# df Ordenado (según formato Mapa_Final)
+
+Centrales_Data_Base_Ord = pd.DataFrame(Centrales_Data_Base_Ord, index = lista_indices_2)
+
+print(Centrales_Data_Base_Ord)
+
+
+
+
+
+
+
+
+
+#################################
+
+# Diccionario Nombre - Tipo Combustible ()
+
+Centrales_Data_Base_Ord['fuel_type'] = Centrales_Data_Base_Ord['fuel_type'].astype(str)
+data_f['fuel_type'] = data_f['fuel_type'].astype(str)  # INPUT.Fuel
+
+nom_comb_dic = dict(zip(Centrales_Data_Base['fuel_type'],data_f['fuel_type']))
+
+# Reemplazo en Col. Tipo Combustible
+
+Centrales_Data_Base['fuel_type'] = Centrales_Data_Base['fuel_type'].map(nom_comb_dic,na_action= None)
+
+print(Centrales_Data_Base)
+
+
+# Reset de Indices
+
+
+# Diccionario Nombre AMEBA - Costo
+
+
+# Reemplazo de Costo
+
+
+
+'''
+no_vinc = ['fuel_CERRO_PABELLON_U3','fuel_TRES_AGUAS','fuel_MAPA','fuel_LOS_VIENTOS_GN_A',
+            'fuel_CMPC_CORDILLERA_GNL_B','fuel_NEHUENCO_1-FA_GNL_B','fuel_NEHUENCO_1-FA_GNL_C',
+            'fuel_NEHUENCO_1-FA_GNL_D','fuel_NEHUENCO_1-FA_GNL_E','fuel_NEHUENCO_1-FA_GNL_F',
+            'fuel_NEHUENCO_1-FA_GNL_G','fuel_NUEVA_RENCA-TG+TV_GNL_F','fuel_LOS_VIENTOS_GNL_A',
+            'fuel_LOS_VIENTOS_GNL_B','fuel_LOS_VIENTOS_GNL_P','fuel_LOS_VIENTOS_GNL_INF',
+            'fuel_MAITENCILLO']
+'''
+
+lista_prueba = [0,15,12,23]
+df = Centrales_Data_Base.iloc[lista_prueba, :]
+
+print(df)
+
+# DataFrame Tipo Combustible / Precio Promedio
+costos_prom_df = pd.DataFrame({'tipo_combustible' : ['geothermal', 'diesel', 'biomass', 'gnl'], 
+'fuel_price_mean' : costos_prom})
+
+#Se resetean los Indices
+df.reset_index(inplace = True, drop = True)
+
+for i in range(0, len(df)):
+    #Recorrer columna de tipo de combustible
+    elem = df.at[i, 'fuel_type']
+    if elem == 'geothermal':
+        df.at[i,'fuel_price'] = prom_costos_geotermica #0
+    elif elem == 'diesel':
+        df.at[i,'fuel_price'] = prom_costos_diesel #1212.729406
+    elif elem == 'biomass':
+        df.at[i,'fuel_price'] = prom_costos_biomasa #21.126393
+    elif elem == 'gnl':
+        df.at[i,'fuel_price'] = prom_costos_gnl #466.385320
+    elif elem == 'fueloil':
+        df.at[i,'fuel_price'] = prom_costos_fueloil
+    else:
+        print('No se encontró el Tipo de Combustible')
+
+print(df)
+
+'''
+'''
+
+'''
